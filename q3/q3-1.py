@@ -44,9 +44,9 @@ class Small_Inception(nn.Module):
         self.inception7 = inception_block(240, 176, 160)
         self.inception8 = inception_block(336, 176, 160)
 
-        self.mean_pooling = nn.AvgPool2d(kernel_size=7)
+        self.mean_pooling = nn.AdaptiveAvgPool2d((7, 7))
 
-        self.fc = nn.Linear(336, num_classes)
+        self.fc = nn.Linear(16464, num_classes)
 
         if init_weights:
             for m in self.modules():
@@ -85,7 +85,7 @@ class Small_Inception(nn.Module):
         x = self.mean_pooling(x)
         # N x 336 x 1 x 1
         x = torch.flatten(x, 1)
-        # N x 336
+        # N x 16464
         x = self.fc(x)
         # N x 10 (num_classes)
         return x
@@ -171,8 +171,10 @@ def train(min_lr, max_lr, train_loader, device):
 
     current_iteration = 0
     total_iterations = num_epochs * len(train_loader)
-    learning_rates = np.logspace(np.log10(min_lr), np.log10(max_lr), num=total_iterations)
+
+    lr_lambda = lambda x: np.exp(x * np.log(max_lr / min_lr) / total_iterations) * min_lr
     training_accuracies = []
+    learning_rates = []
 
     for epoch in range(num_epochs):
         running_loss = 0.0
@@ -180,7 +182,11 @@ def train(min_lr, max_lr, train_loader, device):
         for inputs, labels in train_loader:
             inputs, labels = inputs.to(device), labels.to(device)
 
-            model.train()
+            # update learning rate
+            current_lr = lr_lambda(current_iteration)
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = current_lr
+
             optimizer.zero_grad()
 
             outputs = model(inputs)
@@ -195,13 +201,11 @@ def train(min_lr, max_lr, train_loader, device):
             correct = (predicted == labels).sum().item()
             total = labels.size(0)
             accuracy = correct / total
+
             training_accuracies.append(accuracy)
+            learning_rates.append(current_lr)
 
             current_iteration += 1
-            if current_iteration < total_iterations:
-                # Manually adjust the learning rate
-                for param_group in optimizer.param_groups:
-                    param_group['lr'] = learning_rates[current_iteration]
 
             # Accumulate the loss
             running_loss += loss.item()
@@ -216,7 +220,10 @@ if __name__ == '__main__':
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    transform = transforms.ToTensor()
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.5,), (0.5,))
+    ])
 
     # Download and create the training set
     train_dataset = torchvision.datasets.FashionMNIST(
@@ -227,7 +234,7 @@ if __name__ == '__main__':
     )
 
     train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=64, shuffle=True)
-    learning_rates, accuracies = train(10**(-9), 10, train_dataloader, device)
+    learning_rates, accuracies = train(1e-9, 10, train_dataloader, device)
 
     plt.figure(figsize=(10, 6))
     plt.plot(learning_rates, accuracies, marker='o', linestyle='-', linewidth=2)

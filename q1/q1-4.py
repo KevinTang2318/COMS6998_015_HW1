@@ -10,10 +10,10 @@ def f(x):
     return x + np.sin(1.5 * x)
 
 
-def generate_data(num_dataset, x):
+def generate_data(num_dataset, x, n_samples):
     dataset = []
     while len(dataset) < num_dataset:
-        y_values = f(x) + np.random.normal(0, np.sqrt(0.3))
+        y_values = f(x) + np.random.normal(0, np.sqrt(0.3), n_samples)
         dataset.append(np.column_stack((x, y_values)))
 
     return np.array(dataset)
@@ -23,7 +23,7 @@ if __name__ == '__main__':
     np.random.seed(42)
 
     x = np.array([np.random.uniform(0, 10) for _ in range(50)])
-    datasets = generate_data(100, x)
+    datasets = generate_data(100, x, 50)
 
     X_test = datasets[0][:, 0][40:]
     y_true_test = f(X_test)

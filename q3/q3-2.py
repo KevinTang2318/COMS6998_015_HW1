@@ -43,9 +43,9 @@ class Small_Inception(nn.Module):
         self.inception7 = inception_block(240, 176, 160)
         self.inception8 = inception_block(336, 176, 160)
 
-        self.mean_pooling = nn.AvgPool2d(kernel_size=7)
+        self.mean_pooling = nn.AdaptiveAvgPool2d((7, 7))
 
-        self.fc = nn.Linear(336, num_classes)
+        self.fc = nn.Linear(16464, num_classes)
 
         if init_weights:
             for m in self.modules():
@@ -84,7 +84,7 @@ class Small_Inception(nn.Module):
         x = self.mean_pooling(x)
         # N x 336 x 1 x 1
         x = torch.flatten(x, 1)
-        # N x 336
+        # N x 16464
         x = self.fc(x)
         # N x 10 (num_classes)
         return x
@@ -235,7 +235,7 @@ if __name__ == '__main__':
         shuffle=True
     )
 
-    total_iterations, iteration_loss, iteration_accuracy = train(10**(-5), 0.02, train_loader, device)
+    total_iterations, iteration_loss, iteration_accuracy = train(1e-6, 1e-4, train_loader, device)
 
     iterations = np.arange(1, total_iterations + 1)
 
