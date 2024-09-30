@@ -9,6 +9,7 @@ from torchvision import transforms
 import torch.optim as optim
 import numpy as np
 import matplotlib.pyplot as plt
+from torch.utils.data import random_split
 
 
 class Small_Inception(nn.Module):
@@ -159,23 +160,27 @@ class Downsample(nn.Module):
         return torch.cat(outputs, 1)
 
 
-def train(learning_rate, train_loader, test_loader, device):
-    print(f"Start training with lr={learning_rate}")
-
+def train(min_lr, max_lr, train_loader, device):
     model = Small_Inception(in_channel=1, num_classes=10, init_weights=True)
     model.to(device)
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(model.parameters(), lr=learning_rate)
+    optimizer = optim.SGD(model.parameters(), lr=min_lr)
 
     num_epochs = 5
+
+    current_iteration = 0
+    total_iterations = num_epochs * len(train_loader)
+    learning_rates = np.logspace(np.log10(min_lr), np.log10(max_lr), num=total_iterations)
+    training_accuracies = []
+
     for epoch in range(num_epochs):
-        model.train()
         running_loss = 0.0
 
         for inputs, labels in train_loader:
             inputs, labels = inputs.to(device), labels.to(device)
 
+            model.train()
             optimizer.zero_grad()
 
             outputs = model(inputs)
@@ -185,33 +190,26 @@ def train(learning_rate, train_loader, test_loader, device):
             # Update weights
             optimizer.step()
 
+            # calculate current training accuracy
+            _, predicted = torch.max(outputs, 1)
+            correct = (predicted == labels).sum().item()
+            total = labels.size(0)
+            accuracy = correct / total
+            training_accuracies.append(accuracy)
+
+            current_iteration += 1
+            if current_iteration < total_iterations:
+                # Manually adjust the learning rate
+                for param_group in optimizer.param_groups:
+                    param_group['lr'] = learning_rates[current_iteration]
+
             # Accumulate the loss
             running_loss += loss.item()
 
         # Print average loss for the epoch
         print(f"Epoch [{epoch + 1}/{num_epochs}], Loss: {running_loss / len(train_loader):.4f}")
 
-    # Get accuracy of current model on the training set
-    model.eval()
-    correct = 0
-    total = 0
-
-    # Disable gradient calculation for evaluation
-    with torch.no_grad():
-        for inputs, labels in test_loader:
-            inputs, labels = inputs.to(device), labels.to(device)
-
-            outputs = model(inputs)
-
-            _, predicted = torch.max(outputs, 1)
-
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
-
-    # Calculate accuracy
-    accuracy = correct / total
-    print(f'Test Accuracy: {accuracy:.2f}')
-    return accuracy
+    return learning_rates, training_accuracies
 
 
 if __name__ == '__main__':
@@ -228,30 +226,8 @@ if __name__ == '__main__':
         download=True
     )
 
-    train_loader = torch.utils.data.DataLoader(
-        dataset=train_dataset,
-        batch_size=64,
-        shuffle=True
-    )
-
-    test_dataset = torchvision.datasets.FashionMNIST(
-        root='../data',
-        train=False,
-        transform=transform,
-        download=True
-    )
-
-    test_loader = torch.utils.data.DataLoader(
-        dataset=test_dataset,
-        batch_size=64,
-        shuffle=False
-    )
-
-    learning_rates = np.logspace(-9, 1, num=10)
-    accuracies = []
-
-    for lr in learning_rates:
-        accuracies.append(train(lr, train_loader, test_loader, device))
+    train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=64, shuffle=True)
+    learning_rates, accuracies = train(10**(-9), 10, train_dataloader, device)
 
     plt.figure(figsize=(10, 6))
     plt.plot(learning_rates, accuracies, marker='o', linestyle='-', linewidth=2)

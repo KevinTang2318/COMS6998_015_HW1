@@ -8,6 +8,7 @@ from sklearn.metrics import roc_curve, auc
 from sklearn.metrics import precision_recall_curve, average_precision_score
 import matplotlib.pyplot as plt
 
+
 dataset = pd.read_csv("../data/csv_result-dataset_37_diabetes.csv")
 dataset = dataset.drop(columns=["id"])
 numerical_features = ["preg", "plas", "pres", "skin", "insu", "mass", "pedi", "age"]
@@ -81,26 +82,30 @@ plt.show()
 
 # Generate PR-Gain curve values for Logistic Regression
 pi = 0.36
-precision_gain_adaboost = (precision_adaboost - pi) / ((1 - pi) * precision_adaboost)
-recall_gain_adaboost = (recall_adaboost - pi) / ((1 - pi) * recall_adaboost)
-
-valid_indices = np.isfinite(precision_gain_adaboost) & np.isfinite(recall_gain_adaboost)
-precision_gain_adaboost = precision_gain_adaboost[valid_indices]
-recall_gain_adaboost = recall_gain_adaboost[valid_indices]
 
 
-print("AUPRG for AdaBoost: ", auc(recall_gain_adaboost, precision_gain_adaboost))
+def calculate_auprg(y_true, y_prob, pi):
+    fpr, tpr, thresholds = roc_curve(y_true, y_prob)
 
+    num_positives = np.sum(y_true == 1)
+    num_negatives = np.sum(y_true == 0)
 
-precision_gain_lr = (precision_logistic - pi) / ((1 - pi) * precision_logistic)
-recall_gain_lr = (recall_logistic - pi) / ((1 - pi) * recall_logistic)
+    TP = tpr * num_positives
+    TN = (1 - fpr) * num_negatives
+    FP = fpr * num_negatives
+    FN = num_positives - TP
 
-valid_indices = np.isfinite(precision_gain_lr) & np.isfinite(recall_gain_lr)
-precision_gain_lr = precision_gain_lr[valid_indices]
-recall_gain_lr = recall_gain_lr[valid_indices]
+    raw_precision = np.array([min(1, max(0, x)) for x in FP/TP])
+    raw_recall = np.array([min(1, max(0, x)) for x in FN/TP])
 
+    precision_gain = 1 - (pi / (1 - pi)) * raw_precision
+    recall_gain = 1 - (pi / (1 - pi)) * raw_recall
 
-print("AUPRG for Logistic Regression: ", auc(recall_gain_lr, precision_gain_lr))
+    return auc(recall_gain, precision_gain)
+
+print("AUPRG for AdaBoost: ", calculate_auprg(y_test, y_probs_adaboost, 0.36))
+print("AUPRG for Logistic Regression: ", calculate_auprg(y_test, y_probs_lr, 0.36))
+
 
 
 

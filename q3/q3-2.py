@@ -235,7 +235,7 @@ if __name__ == '__main__':
         shuffle=True
     )
 
-    total_iterations, iteration_loss, iteration_accuracy = train(10**(-6), 0.1, train_loader, device)
+    total_iterations, iteration_loss, iteration_accuracy = train(10**(-5), 0.02, train_loader, device)
 
     iterations = np.arange(1, total_iterations + 1)
 

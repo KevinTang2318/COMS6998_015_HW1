@@ -5,19 +5,16 @@ import matplotlib.pyplot as plt
 from collections import defaultdict
 from sklearn.metrics import mean_squared_error
 
+
 def f(x):
     return x + np.sin(1.5 * x)
 
 
-def generate_data(num_data, test_set):
-
+def generate_data(num_dataset, x):
     dataset = []
-
-    while len(dataset) < num_data:
-        x_value = np.random.uniform(0, 10)
-        y_value = f(x_value) + np.random.normal(0, np.sqrt(0.3))
-        if [x_value, y_value] not in test_set:
-            dataset.append([x_value, y_value])
+    while len(dataset) < num_dataset:
+        y_values = f(x) + np.random.normal(0, np.sqrt(0.3))
+        dataset.append(np.column_stack((x, y_values)))
 
     return np.array(dataset)
 
@@ -25,23 +22,22 @@ def generate_data(num_data, test_set):
 if __name__ == '__main__':
     np.random.seed(42)
 
-    # Generate the test set shared across all 100 training sets
-    test_data = generate_data(10, [])
-    x_test = test_data[:, 0].reshape(-1, 1)
-    y_test = test_data[:, 1]
+    x = np.array([np.random.uniform(0, 10) for _ in range(50)])
+    datasets = generate_data(100, x)
 
-    # Generate 100 train datasets that does not contain data from test set
-    train_datasets = []
-    for i in range(100):
-        train_datasets.append(generate_data(40, test_data))
+    X_test = datasets[0][:, 0][40:]
+    y_true_test = f(X_test)
+    mse_scores = np.zeros((100, 15))
 
     # Fit the estimators and evaluate them using the test set
     predictions = defaultdict(list)
     for degree in range(1, 16):
         poly_features = PolynomialFeatures(degree=degree)
-        for train_set in train_datasets:
-            x_train = train_set[:, 0].reshape(-1, 1)
-            y_train = train_set[:, 1]
+        for i, dataset in enumerate(datasets):
+            x_train = dataset[:, 0][:40].reshape(-1, 1)
+            y_train = dataset[:, 1][:40]
+            y_test = dataset[:, 1][40:]
+
             x_train_poly = poly_features.fit_transform(x_train)
 
             # fit a model on the current training set
@@ -49,21 +45,21 @@ if __name__ == '__main__':
             model.fit(x_train_poly, y_train)
 
             # test the model on the test_set
-            x_test_poly = poly_features.transform(x_test)
+            x_test_poly = poly_features.transform(X_test.reshape(-1, 1))
             y_pred = model.predict(x_test_poly)
+
+            mse_scores[i, degree - 1] = mean_squared_error(y_test, y_pred)
 
             predictions[degree].append(y_pred)
 
     # calculate the squared bias, variance, and error
     squared_bias = []
     variance = []
-    error = []
 
     for degree in range(1, 16):
-        mean_predictions = np.mean(predictions[degree], axis=0)
-        squared_bias.append(np.mean((y_test - mean_predictions) ** 2))
-        variance.append(np.mean(np.var(predictions[degree], axis=0)))
-        error.append(mean_squared_error(y_test, mean_predictions))
+        mean_predictions = np.mean(np.array(predictions[degree]), axis=0)
+        squared_bias.append(np.mean((y_true_test - mean_predictions) ** 2))
+        variance.append(np.mean(np.var(np.array(predictions[degree]), axis=0)))
 
     # Plot the bias, variance, and error statistics
     degrees = np.arange(1, 16)
@@ -71,7 +67,7 @@ if __name__ == '__main__':
 
     plt.plot(degrees, squared_bias, label='Mean Squared Bias', marker='o')
     plt.plot(degrees, variance, label='Mean Variance', marker='o')
-    plt.plot(degrees, error, label='Mean Squared Error (MSE)', marker='o')
+    plt.plot(degrees, np.mean(mse_scores, axis=0), label='Mean Squared Error (MSE)', marker='o')
 
     # Adding titles and labels
     plt.title('Squared Bias, Variance, and Error vs. Model Complexity (Degree)')
